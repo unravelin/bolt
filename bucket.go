@@ -91,10 +91,7 @@ func (b *Bucket) Cursor() *Cursor {
 	b.tx.stats.CursorCount++
 
 	// Allocate and return a cursor.
-	return &Cursor{
-		bucket: b,
-		stack:  make([]elemRef, 0),
-	}
+	return newCursor(b)
 }
 
 // Bucket retrieves a nested bucket by name.
@@ -110,6 +107,7 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	// Move cursor to key.
 	c := b.Cursor()
 	k, v, flags := c.seek(name)
+	c.Close()
 
 	// Return nil if the key doesn't exist or it is not a bucket.
 	if !bytes.Equal(name, k) || (flags&bucketLeafFlag) == 0 {
@@ -162,6 +160,7 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	// Move cursor to correct position.
 	c := b.Cursor()
 	k, _, flags := c.seek(key)
+	defer c.Close()
 
 	// Return an error if there is an existing key.
 	if bytes.Equal(key, k) {
@@ -257,7 +256,9 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 // Returns a nil value if the key does not exist or if the key is a nested bucket.
 // The returned value is only valid for the life of the transaction.
 func (b *Bucket) Get(key []byte) []byte {
-	k, v, flags := b.Cursor().seek(key)
+	c := b.Cursor()
+	k, v, flags := c.seek(key)
+	c.Close()
 
 	// Return nil if this is a bucket.
 	if (flags & bucketLeafFlag) != 0 {
@@ -362,6 +363,7 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 			return err
 		}
 	}
+	c.Close()
 	return nil
 }
 
