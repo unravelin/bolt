@@ -216,6 +216,7 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 	// Move cursor to correct position.
 	c := b.Cursor()
 	k, _, flags := c.seek(key)
+	defer c.Close()
 
 	// Return an error if bucket doesn't exist or is not a bucket.
 	if !bytes.Equal(key, k) {
@@ -291,6 +292,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
+	defer c.Close()
 	k, _, flags := c.seek(key)
 
 	// Return an error if there is an existing key with a bucket value.
@@ -317,6 +319,7 @@ func (b *Bucket) Delete(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
+	defer c.Close()
 	_, _, flags := c.seek(key)
 
 	// Return an error if there is already existing bucket value.
@@ -358,12 +361,12 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 		return ErrTxClosed
 	}
 	c := b.Cursor()
+	defer c.Close()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		if err := fn(k, v); err != nil {
 			return err
 		}
 	}
-	c.Close()
 	return nil
 }
 
@@ -532,6 +535,7 @@ func (b *Bucket) spill() error {
 			panic(fmt.Sprintf("unexpected bucket header flag: %x", flags))
 		}
 		c.node().put([]byte(name), []byte(name), value, 0, bucketLeafFlag)
+		c.Close()
 	}
 
 	// Ignore if there's not a materialized root node.
