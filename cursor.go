@@ -48,8 +48,6 @@ func (fs *FreeStack) Get() []elemRef {
 	if l > 0 {
 		s = fs.items[l-1]
 		fs.items = fs.items[:l-1]
-	} else {
-		s = make([]elemRef, 0, 1)
 	}
 	fs.Unlock()
 	return s
