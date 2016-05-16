@@ -20,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/boltdb/bolt"
+	"github.com/unravelin/bolt"
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
