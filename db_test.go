@@ -1473,6 +1473,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 						if err := b.Put(k, []byte("filler")); err != nil {
 							return err
 						}
+						b.Close()
 					}
 					return nil
 				}
@@ -1566,6 +1567,7 @@ func BenchmarkDBTraverse(b *testing.B) {
 			}); err != nil {
 				return err
 			}
+			nodeBucket.Close()
 		}
 		return nil
 	}); err != nil {

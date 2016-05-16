@@ -3,6 +3,7 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"unsafe"
 )
 
@@ -126,13 +127,14 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 // Helper method that re-interprets a sub-bucket value
 // from a parent into a Bucket
 func (b *Bucket) openBucket(value []byte) *Bucket {
-	var child = newBucket(b.tx)
+	child := bucketPool.Get()
+	*child = newBucket(b.tx)
 
 	// If this is a writable transaction then we need to copy the bucket entry.
 	// Read-only transactions can point directly at the mmap entry.
 	if b.tx.writable {
 		child.bucket = &bucket{}
-		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
+		*(child.bucket) = *(*bucket)(unsafe.Pointer(&value[0]))
 	} else {
 		child.bucket = (*bucket)(unsafe.Pointer(&value[0]))
 	}
@@ -142,8 +144,54 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 		child.page = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
 	}
 
-	return &child
+	return child
 }
+
+// Close releases the bucket structure so the memory can be used for another bucket.
+// Do not touch the bucket again after closing it. Note this does not effect the
+// contents of the bucket in the database, just the memory allocated to control
+// access to it.
+// You do not need to call Close() on your buckets, but doing so may reduce the
+// number of memory allocations, particularly when traversing a large number of
+// buckets in a read transaction.
+func (b *Bucket) Close() {
+	// if the bucket is part of a writeable transaction then we don't re-use the
+	// memory as it is kept in its parent buckets map
+	if b.tx.writable {
+		return
+	}
+	bucketPool.Put(b)
+}
+
+type freeBuckets struct {
+	sync.Mutex
+	items []*Bucket
+}
+
+func (fs *freeBuckets) Get() *Bucket {
+	fs.Lock()
+	l := len(fs.items)
+	var i *Bucket
+	if l > 0 {
+		i = fs.items[l-1]
+		fs.items = fs.items[:l-1]
+	} else {
+		i = &Bucket{}
+	}
+	fs.Unlock()
+	return i
+}
+
+func (fs *freeBuckets) Put(i *Bucket) {
+	// Ensure bucket is cleaned before storage - otherwise we might stop things
+	// being cleaned up with GC
+	*i = Bucket{}
+	fs.Lock()
+	fs.items = append(fs.items, i)
+	fs.Unlock()
+}
+
+var bucketPool = freeBuckets{}
 
 // CreateBucket creates a new bucket at the given key and returns the new bucket.
 // Returns an error if the key already exists, if the bucket name is blank, or if the bucket name is too long.
